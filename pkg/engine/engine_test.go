@@ -192,8 +192,8 @@ func main() {
 	})
 }
 
-// TestEngine_NoExists_TrueNegative_CheckControlFlow tests the CheckControlFlow method of the Engine struct with true positive cases
-func TestEngine_NoExists_TrueNegative_CheckControlFlow(t *testing.T) {
+// TestEngine_NoExists_CheckControlFlow tests the CheckControlFlow method of the Engine struct with true positive cases
+func TestEngine_NoExists_CheckControlFlow(t *testing.T) {
 	t.Run("CheckControlFlow with no excessive control flow", func(t *testing.T) {
 		assert := testAssert.New(t)
 		src := `

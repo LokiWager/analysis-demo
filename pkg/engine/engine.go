@@ -26,20 +26,20 @@ import (
 )
 
 type (
+	// Engine is the analysis engine
 	Engine struct {
-		// file set
+		// file set of the source code
 		fileSet *token.FileSet
 
-		// file
+		// file of the source code
 		file *ast.File
-	}
-
-	TargetIdentifiers struct {
-		Name string
-		Pos  token.Pos
 	}
 )
 
+// NewEngine creates a new Engine instance
+// path is the path of the source code, if not exists, pass an empty string
+// src is the source code, if not exists, pass nil
+// path and src must not be nil at the same time
 func NewEngine(path string, src any) *Engine {
 	fileSet := token.NewFileSet()
 	file, err := parser.ParseFile(fileSet, path, src, parser.ParseComments)
@@ -54,6 +54,8 @@ func NewEngine(path string, src any) *Engine {
 	}
 }
 
+// CheckIdentifiers checks if the identifiers' length is equal to 13
+// returns true if all identifiers' length is not equal to 13, otherwise false
 func (e *Engine) CheckIdentifiers() bool {
 	// check if identifier's length is equal to 13
 	noExists := false
@@ -72,6 +74,8 @@ func (e *Engine) CheckIdentifiers() bool {
 	return !noExists
 }
 
+// CheckControlFlow checks if the control flow (if, for, switch, select) is nested more than 4 times
+// returns true if control flow is not nested more than 4 times, otherwise false
 func (e *Engine) CheckControlFlow() bool {
 	// check if control flow (if, for, switch, select) is nested 4 times
 	maxDepth := e.checkNestingLevel(e.file, 0, 4)
