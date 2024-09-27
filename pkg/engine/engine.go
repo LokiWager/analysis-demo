@@ -54,62 +54,69 @@ func NewEngine(path string, src any) *Engine {
 	}
 }
 
-func (e *Engine) CheckIdentifiers() ([]TargetIdentifiers, bool) {
+func (e *Engine) CheckIdentifiers() bool {
 	// check if identifier's length is equal to 13
-	targetIdentifiers := make([]TargetIdentifiers, 0)
+	exists := false
 	ast.Inspect(e.file, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.Ident:
 			if len(x.Name) == 13 {
-				targetIdentifiers = append(targetIdentifiers, TargetIdentifiers{
-					Name: x.Name,
-					Pos:  x.Pos(),
-				})
+				exists = true
+				return false
 			}
 		}
 
 		return true
 	})
 
-	return targetIdentifiers, len(targetIdentifiers) > 0
+	return exists
 }
 
 func (e *Engine) CheckControlFlow() bool {
 	// check if control flow (if, for, switch, select) is nested 4 times
-	hasExceeded := false
-	ast.Inspect(e.file, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.IfStmt, *ast.ForStmt, *ast.SwitchStmt, *ast.SelectStmt:
-			if e.checkNestingLevel(x, 1, 4) {
-				hasExceeded = true
-				return false
+	maxDepth := e.checkNestingLevel(e.file, 0, 4)
+	return maxDepth > 4
+}
+
+func (e *Engine) checkNestingLevel(parent ast.Node, depth, maxLevel int) int {
+	if depth > maxLevel {
+		return depth
+	}
+
+	maxDepth := depth
+
+	ast.Inspect(parent, func(node ast.Node) bool {
+		switch x := node.(type) {
+		case *ast.IfStmt:
+			currentDepth := e.checkNestingLevel(x.Body, depth+1, maxLevel)
+			if currentDepth > maxDepth {
+				maxDepth = currentDepth
+			}
+
+			if x.Else != nil {
+				currentDepth := e.checkNestingLevel(x.Else, depth+1, maxLevel)
+				if currentDepth > maxDepth {
+					maxDepth = currentDepth
+				}
+			}
+		case *ast.ForStmt:
+			currentDepth := e.checkNestingLevel(x.Body, depth+1, maxLevel)
+			if currentDepth > maxDepth {
+				maxDepth = currentDepth
+			}
+		case *ast.SwitchStmt:
+			currentDepth := e.checkNestingLevel(x.Body, depth+1, maxLevel)
+			if currentDepth > maxDepth {
+				maxDepth = currentDepth
+			}
+		case *ast.SelectStmt:
+			currentDepth := e.checkNestingLevel(x.Body, depth+1, maxLevel)
+			if currentDepth > maxDepth {
+				maxDepth = currentDepth
 			}
 		}
 		return true
 	})
 
-	return hasExceeded
-}
-
-func (e *Engine) checkNestingLevel(node ast.Node, depth, maxLevel int) bool {
-	if depth == maxLevel {
-		return true
-	}
-
-	switch x := node.(type) {
-	case *ast.IfStmt, *ast.ForStmt, *ast.SwitchStmt, *ast.SelectStmt:
-		hasExceeded := false
-		ast.Inspect(x, func(n ast.Node) bool {
-			switch n.(type) {
-			case *ast.IfStmt, *ast.ForStmt, *ast.SwitchStmt, *ast.SelectStmt:
-				hasExceeded = e.checkNestingLevel(n, depth+1, maxLevel)
-				if hasExceeded {
-					return false
-				}
-			}
-			return true
-		})
-		return hasExceeded
-	}
-	return false
+	return maxDepth
 }
