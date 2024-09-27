@@ -81,12 +81,12 @@ func main() {
 				logrus.Infof("Analyzing %s", entry.Name())
 				e := engine.NewEngine(filepath.Join(path, entry.Name()), nil)
 				ok := e.CheckIdentifiers()
-				if ok {
+				if !ok {
 					logrus.Infof("\t Found identifier with length 13")
 				}
 
 				controlFlow := e.CheckControlFlow()
-				if controlFlow {
+				if !controlFlow {
 					logrus.Infof("\t Found more than 4 level nested control flow")
 				}
 			}

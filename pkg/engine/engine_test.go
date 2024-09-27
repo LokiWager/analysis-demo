@@ -25,7 +25,7 @@ import (
 	"github.com/LokiWager/analysis-demo/pkg/engine"
 )
 
-// TestEngine_Exists_CheckIdentifiers tests the CheckIdentifiers method of the Engine struct with true positive cases
+// TestEngine_Exists_CheckIdentifiers tests the CheckIdentifiers method of the Engine struct with true negative cases
 func TestEngine_Exists_CheckIdentifiers(t *testing.T) {
 	t.Run("Exists CheckIdentifiers for vars", func(t *testing.T) {
 		assert := testAssert.New(t)
@@ -46,8 +46,8 @@ func main() {
 `
 		e := engine.NewEngine("", src)
 
-		exists := e.CheckIdentifiers()
-		assert.True(exists)
+		ok := e.CheckIdentifiers()
+		assert.False(ok)
 	})
 
 	t.Run("Exists CheckIdentifiers for functions", func(t *testing.T) {
@@ -65,8 +65,8 @@ func idNotEqual13() {
 `
 		e := engine.NewEngine("", src)
 
-		exists := e.CheckIdentifiers()
-		assert.True(exists)
+		ok := e.CheckIdentifiers()
+		assert.False(ok)
 	})
 
 	t.Run("Exists CheckIdentifiers for structs", func(t *testing.T) {
@@ -80,8 +80,8 @@ type idEqual13xxxx struct {
 `
 		e := engine.NewEngine("", src)
 
-		exists := e.CheckIdentifiers()
-		assert.True(exists)
+		ok := e.CheckIdentifiers()
+		assert.False(ok)
 	})
 
 	t.Run("Exists CheckIdentifiers for multiple identifiers", func(t *testing.T) {
@@ -96,12 +96,12 @@ func idEqual13xxxx() {
 `
 		e := engine.NewEngine("", src)
 
-		exists := e.CheckIdentifiers()
-		assert.True(exists)
+		ok := e.CheckIdentifiers()
+		assert.False(ok)
 	})
 }
 
-// TestEngine_NoExists_CheckIdentifiers tests the CheckIdentifiers method of the Engine struct with false positive cases
+// TestEngine_NoExists_CheckIdentifiers tests the CheckIdentifiers method of the Engine struct with true positive cases
 func TestEngine_NoExists_CheckIdentifiers(t *testing.T) {
 	t.Run("CheckIdentifiers for no identifiers", func(t *testing.T) {
 		assert := testAssert.New(t)
@@ -114,13 +114,10 @@ func main() {
 `
 		e := engine.NewEngine("", src)
 
-		exists := e.CheckIdentifiers()
-		assert.False(exists)
+		ok := e.CheckIdentifiers()
+		assert.True(ok)
 	})
-}
 
-// TestEngine_NoExists_TrueNegative_CheckIdentifiers tests the CheckIdentifiers method of the Engine struct with true negative cases
-func TestEngine_NoExists_TrueNegative_CheckIdentifiers(t *testing.T) {
 	t.Run("CheckIdentifiers with no match", func(t *testing.T) {
 		assert := testAssert.New(t)
 		src := `
@@ -134,12 +131,12 @@ func main() {
 }`
 		e := engine.NewEngine("", src)
 
-		noMatch := e.CheckIdentifiers()
-		assert.False(noMatch)
+		ok := e.CheckIdentifiers()
+		assert.True(ok)
 	})
 }
 
-// TestEngine_Exists_CheckControlFlow tests the CheckControlFlow method of the Engine struct with true positive cases
+// TestEngine_Exists_CheckControlFlow tests the CheckControlFlow method of the Engine struct with true negative cases
 func TestEngine_Exists_CheckControlFlow(t *testing.T) {
 	t.Run("CheckControlFlow with if statement", func(t *testing.T) {
 		assert := testAssert.New(t)
@@ -162,8 +159,8 @@ func main() {
 `
 		e := engine.NewEngine("", src)
 
-		hasExceeded := e.CheckControlFlow()
-		assert.True(hasExceeded)
+		ok := e.CheckControlFlow()
+		assert.False(ok)
 	})
 
 	t.Run("CheckControlFlow with for, if, switch, select statement", func(t *testing.T) {
@@ -190,46 +187,93 @@ func main() {
 `
 		e := engine.NewEngine("", src)
 
-		hasExceeded := e.CheckControlFlow()
-		assert.True(hasExceeded)
+		ok := e.CheckControlFlow()
+		assert.False(ok)
 	})
 }
 
-// TestEngine_NoExists_CheckControlFlow tests the CheckControlFlow method of the Engine struct with false positive cases
-func TestEngine_NoExists_CheckControlFlow(t *testing.T) {
-	t.Run("CheckControlFlow with no control flow", func(t *testing.T) {
-		assert := testAssert.New(t)
-		src := `
-package main
-
-func main() {
-	return
-}
-`
-		e := engine.NewEngine("", src)
-
-		hasExceeded := e.CheckControlFlow()
-		assert.False(hasExceeded)
-	})
-}
-
-// TestEngine_NoExists_TrueNegative_CheckControlFlow tests the CheckControlFlow method of the Engine struct with true negative cases
+// TestEngine_NoExists_TrueNegative_CheckControlFlow tests the CheckControlFlow method of the Engine struct with true positive cases
 func TestEngine_NoExists_TrueNegative_CheckControlFlow(t *testing.T) {
 	t.Run("CheckControlFlow with no excessive control flow", func(t *testing.T) {
 		assert := testAssert.New(t)
 		src := `
 package main
 func main() {
-	if true {
-		return
-	}
 	if false {
 		return
 	}
 }
 `
 		e := engine.NewEngine("", src)
-		hasExceeded := e.CheckControlFlow()
-		assert.Equal(false, hasExceeded)
+		ok := e.CheckControlFlow()
+		assert.True(ok)
+	})
+
+	t.Run("CheckControlFlow with no excessive control flow", func(t *testing.T) {
+		assert := testAssert.New(t)
+		src := `
+package main
+func main() {
+	for i := 0; i < 10; i++ {
+	}
+}
+`
+		e := engine.NewEngine("", src)
+		ok := e.CheckControlFlow()
+		assert.True(ok)
+	})
+}
+
+// TestEngine_NoExists_CheckControlFlow tests the CheckControlFlow method of the Engine struct with false negative cases
+func TestEngine_NoExists_FalsePositive_CheckControlFlow(t *testing.T) {
+	t.Run("CheckControlFlow with no control flow", func(t *testing.T) {
+		assert := testAssert.New(t)
+		src := `
+package main
+
+func main() {
+	if true {
+		if false {
+			return
+		}
+	}
+	return
+}
+`
+		e := engine.NewEngine("", src)
+
+		ok := e.CheckControlFlow()
+		assert.True(ok)
+	})
+}
+
+// TestEngine_NoExists_CheckControlFlow tests the CheckControlFlow method of the Engine struct with false positive cases
+func TestEngine_NoExists_FalseNegative_CheckControlFlow(t *testing.T) {
+	t.Run("CheckControlFlow with no control flow", func(t *testing.T) {
+		assert := testAssert.New(t)
+		src := `
+package main
+
+func main() {
+	if true {
+		return
+	} else {
+		if false {
+			if true {
+				if false {
+					if true {
+						return
+					}
+				}
+			}
+		}
+	}
+	return
+}
+`
+		e := engine.NewEngine("", src)
+
+		ok := e.CheckControlFlow()
+		assert.False(ok)
 	})
 }

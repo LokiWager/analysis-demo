@@ -56,12 +56,12 @@ func NewEngine(path string, src any) *Engine {
 
 func (e *Engine) CheckIdentifiers() bool {
 	// check if identifier's length is equal to 13
-	exists := false
+	noExists := false
 	ast.Inspect(e.file, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.Ident:
 			if len(x.Name) == 13 {
-				exists = true
+				noExists = true
 				return false
 			}
 		}
@@ -69,13 +69,13 @@ func (e *Engine) CheckIdentifiers() bool {
 		return true
 	})
 
-	return exists
+	return !noExists
 }
 
 func (e *Engine) CheckControlFlow() bool {
 	// check if control flow (if, for, switch, select) is nested 4 times
 	maxDepth := e.checkNestingLevel(e.file, 0, 4)
-	return maxDepth > 4
+	return maxDepth <= 4
 }
 
 func (e *Engine) checkNestingLevel(parent ast.Node, depth, maxLevel int) int {
