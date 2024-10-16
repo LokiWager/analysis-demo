@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package engine_test
+package ast_test
 
 import (
 	"testing"
 
 	testAssert "github.com/stretchr/testify/assert"
 
-	"github.com/LokiWager/analysis-demo/pkg/engine"
+	"github.com/LokiWager/analysis-demo/pkg/ast"
 )
 
 // TestEngine_Exists_CheckIdentifiers tests the CheckIdentifiers method of the Engine struct with true negative cases
@@ -44,7 +44,7 @@ func main() {
 	fmt.Println(idNotEqual13)
 }
 `
-		e := engine.NewEngine("", src)
+		e := ast.NewEngine("", src)
 
 		ok := e.CheckIdentifiers()
 		assert.False(ok)
@@ -63,7 +63,7 @@ func idNotEqual13() {
 	return
 }
 `
-		e := engine.NewEngine("", src)
+		e := ast.NewEngine("", src)
 
 		ok := e.CheckIdentifiers()
 		assert.False(ok)
@@ -78,7 +78,7 @@ type idEqual13xxxx struct {
 	Name string
 }
 `
-		e := engine.NewEngine("", src)
+		e := ast.NewEngine("", src)
 
 		ok := e.CheckIdentifiers()
 		assert.False(ok)
@@ -94,7 +94,7 @@ func idEqual13xxxx() {
 	return
 }
 `
-		e := engine.NewEngine("", src)
+		e := ast.NewEngine("", src)
 
 		ok := e.CheckIdentifiers()
 		assert.False(ok)
@@ -112,7 +112,7 @@ func main() {
 	return
 }
 `
-		e := engine.NewEngine("", src)
+		e := ast.NewEngine("", src)
 
 		ok := e.CheckIdentifiers()
 		assert.True(ok)
@@ -129,7 +129,7 @@ func main() {
 	fmt.Println(idNot13)
 	fmt.Println(idNOT13)
 }`
-		e := engine.NewEngine("", src)
+		e := ast.NewEngine("", src)
 
 		ok := e.CheckIdentifiers()
 		assert.True(ok)
@@ -157,7 +157,7 @@ func main() {
 	}
 }
 `
-		e := engine.NewEngine("", src)
+		e := ast.NewEngine("", src)
 
 		ok := e.CheckControlFlow()
 		assert.False(ok)
@@ -185,7 +185,7 @@ func main() {
 	}
 }
 `
-		e := engine.NewEngine("", src)
+		e := ast.NewEngine("", src)
 
 		ok := e.CheckControlFlow()
 		assert.False(ok)
@@ -204,7 +204,7 @@ func main() {
 	}
 }
 `
-		e := engine.NewEngine("", src)
+		e := ast.NewEngine("", src)
 		ok := e.CheckControlFlow()
 		assert.True(ok)
 	})
@@ -218,7 +218,7 @@ func main() {
 	}
 }
 `
-		e := engine.NewEngine("", src)
+		e := ast.NewEngine("", src)
 		ok := e.CheckControlFlow()
 		assert.True(ok)
 	})
@@ -240,7 +240,7 @@ func main() {
 	return
 }
 `
-		e := engine.NewEngine("", src)
+		e := ast.NewEngine("", src)
 
 		ok := e.CheckControlFlow()
 		assert.True(ok)
@@ -271,7 +271,7 @@ func main() {
 	return
 }
 `
-		e := engine.NewEngine("", src)
+		e := ast.NewEngine("", src)
 
 		ok := e.CheckControlFlow()
 		assert.False(ok)

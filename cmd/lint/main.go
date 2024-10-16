@@ -26,7 +26,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 
-	"github.com/LokiWager/analysis-demo/pkg/engine"
+	"github.com/LokiWager/analysis-demo/pkg/ast"
 )
 
 var versionTag string
@@ -79,7 +79,7 @@ func main() {
 				}
 
 				logrus.Infof("Analyzing %s", entry.Name())
-				e := engine.NewEngine(filepath.Join(path, entry.Name()), nil)
+				e := ast.NewEngine(filepath.Join(path, entry.Name()), nil)
 				ok := e.CheckIdentifiers()
 				if !ok {
 					logrus.Infof("\t Found identifier with length 13")

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package engine
+package ast
 
 import (
 	"go/ast"
