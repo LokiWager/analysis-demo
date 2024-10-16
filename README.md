@@ -8,4 +8,4 @@ a demo for Golang Static Analysis
   2. Whether there are control structures in the code nested more than 4 levels.
 
 * parity: It is a demo for Golang CFG & SSA. It is a simple tool to analyze:
-  The variable is even or odd.
+  - The variable is even or odd.
