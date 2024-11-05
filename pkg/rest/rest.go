@@ -54,6 +54,8 @@ func (s *Server) setupAPIs() {
 	s.group.GET("/process/info", s.service.GetProcessInfo)
 	s.group.GET("/process/fds", s.service.GetOpenFiles)
 	s.group.GET("/process/usages", s.service.GetUsage)
+	s.group.GET("/process/connections", s.service.GetConnections)
+	s.group.GET("/process/profile", s.service.GetProfile)
 }
 
 func (s *Server) ServerForever(port int) {

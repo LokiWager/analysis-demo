@@ -3,6 +3,7 @@ module github.com/LokiWager/analysis-demo
 go 1.22.4
 
 require (
+	github.com/go-resty/resty/v2 v2.15.3
 	github.com/labstack/echo/v4 v4.12.0
 	github.com/shirou/gopsutil/v4 v4.24.10
 	github.com/sirupsen/logrus v1.9.3

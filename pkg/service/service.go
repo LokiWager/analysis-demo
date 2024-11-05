@@ -2,10 +2,19 @@ package service
 
 import (
 	"debug/buildinfo"
+	"os"
+	"os/exec"
+	"time"
+
+	"github.com/go-resty/resty/v2"
 	"github.com/labstack/echo/v4"
 	"github.com/shirou/gopsutil/v4/process"
 
 	"github.com/LokiWager/analysis-demo/pkg/logger"
+)
+
+const (
+	DefaultTimeout = 30
 )
 
 type (
@@ -16,8 +25,9 @@ type (
 
 	// Service is the service.
 	Service struct {
-		config  *ServiceConfig
-		process *process.Process
+		config      *ServiceConfig
+		process     *process.Process
+		restyClient *resty.Client
 	}
 
 	// ProcessInfo is the information of a process.
@@ -52,9 +62,12 @@ func NewService(config *ServiceConfig) *Service {
 		panic(err)
 	}
 
+	client := resty.New().SetTimeout(DefaultTimeout * time.Second)
+
 	return &Service{
-		config:  config,
-		process: p,
+		config:      config,
+		process:     p,
+		restyClient: client,
 	}
 }
 
@@ -135,57 +148,65 @@ func (s *Service) getGoVersion(path string) (string, error) {
 }
 
 func (s *Service) GetUsage(ctx echo.Context) error {
+	result := echo.Map{}
+
 	cpuPercent, err := s.process.CPUPercent()
 	if err != nil {
 		logger.Warnf("get process cpu cpuPercent failed: %v", err)
+	} else {
+		result["cpuPercent"] = cpuPercent
 	}
 
 	memoryPercent, err := s.process.MemoryPercent()
 	if err != nil {
 		logger.Warnf("get process memory memoryPercent failed: %v", err)
+	} else {
+		result["memoryPercent"] = memoryPercent
 	}
 
 	pageFaults, err := s.process.PageFaults()
 	if err != nil {
 		logger.Warnf("get process pageFaults failed: %v", err)
+	} else {
+		result["pageFaults"] = pageFaults.MajorFaults + pageFaults.MinorFaults + pageFaults.ChildMajorFaults + pageFaults.ChildMinorFaults
 	}
 
 	ioCounters, err := s.process.IOCounters()
 	if err != nil {
 		logger.Warnf("get process ioCounters failed: %v", err)
+	} else {
+		result["readCount"] = ioCounters.ReadCount
+		result["writeCount"] = ioCounters.WriteCount
+		result["readBytes"] = ioCounters.ReadBytes
+		result["writeBytes"] = ioCounters.WriteBytes
 	}
 
 	memoryInfo, err := s.process.MemoryInfo()
 	if err != nil {
 		logger.Warnf("get process memoryInfo failed: %v", err)
+	} else {
+		result["rss"] = memoryInfo.RSS
+		result["vms"] = memoryInfo.VMS
+		result["swap"] = memoryInfo.Swap
 	}
 
 	cpuTimes, err := s.process.Times()
 	if err != nil {
 		logger.Warnf("get process cpuTimes failed: %v", err)
+	} else {
+		result["userTime"] = cpuTimes.User
+		result["systemTime"] = cpuTimes.System
+		result["iowait"] = cpuTimes.Iowait
 	}
 
 	contextSwitches, err := s.process.NumCtxSwitches()
 	if err != nil {
 		logger.Warnf("get process contextSwitches failed: %v", err)
+	} else {
+		result["contextSwitch"] = contextSwitches.Involuntary + contextSwitches.Voluntary
 	}
 
-	return ctx.JSON(200, echo.Map{
-		"cpuPercent":    cpuPercent,
-		"memoryPercent": memoryPercent,
-		"pageFaults":    pageFaults.MajorFaults + pageFaults.MinorFaults + pageFaults.ChildMajorFaults + pageFaults.ChildMinorFaults,
-		"readCount":     ioCounters.ReadCount,
-		"writeCount":    ioCounters.WriteCount,
-		"readBytes":     ioCounters.ReadBytes,
-		"writeBytes":    ioCounters.WriteBytes,
-		"rss":           memoryInfo.RSS,
-		"vms":           memoryInfo.VMS,
-		"swap":          memoryInfo.Swap,
-		"userTime":      cpuTimes.User,
-		"systemTime":    cpuTimes.System,
-		"iowait":        cpuTimes.Iowait,
-		"contextSwitch": contextSwitches.Involuntary + contextSwitches.Voluntary,
-	})
+	return ctx.JSON(200, result)
 }
 
 func (s *Service) GetOpenFiles(ctx echo.Context) error {
@@ -215,4 +236,41 @@ func (s *Service) GetConnections(ctx echo.Context) error {
 	}
 
 	return ctx.JSON(200, connections)
+}
+
+func (s *Service) GetProfile(ctx echo.Context) error {
+	// curl -o trace.out http://localhost:6060/debug/pprof/trace\?seconds\=5
+	// go tool trace trace.out
+	// create tmp file
+	tmpFile, err := os.CreateTemp("", "trace-*.out")
+	if err != nil {
+		logger.Warnf("create tmp file failed: %v", err)
+		return ctx.NoContent(500)
+	}
+
+	// write to tmp file
+	_, err = s.restyClient.R().
+		SetOutput(tmpFile.Name()).
+		Execute("GET", "http://localhost:6060/debug/pprof/trace?seconds=5")
+	if err != nil {
+		logger.Warnf("get profile failed: %v", err)
+		return ctx.NoContent(500)
+	}
+
+	if _, err := exec.LookPath("go"); err != nil {
+		logger.Warnf("go command not found: %v", err)
+		return ctx.NoContent(500)
+	}
+
+	go func() {
+		err = exec.Command("go", "tool", "trace", "-http=:8891", tmpFile.Name()).Run()
+		if err != nil {
+			logger.Warnf("run go tool trace failed: %v", err)
+		}
+		defer func() {
+			_ = os.Remove(tmpFile.Name())
+		}()
+	}()
+
+	return ctx.String(200, "view profile at http://[::]:8891/")
 }
