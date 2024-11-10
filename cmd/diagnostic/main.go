@@ -15,6 +15,8 @@ import (
 )
 
 func main() {
+	// TODO: 2. trace 可展示，可唤起 trace 程序
+	// TODO: 3. 支持数据持久化及查询
 	logger.Init(&logger.Config{Debug: false})
 	app := &cli.App{
 		Name:  "diagnostic",
@@ -25,6 +27,11 @@ func main() {
 				Value: 0,
 				Usage: "The process id to diagnose",
 			},
+			&cli.BoolFlag{
+				Name:  "persist",
+				Value: false,
+				Usage: "The path to persist the diagnostic data",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			pid := c.Int("pid")
@@ -33,6 +40,10 @@ func main() {
 			}
 			config := &service.ServiceConfig{
 				ProcessID: pid,
+			}
+
+			if c.Bool("persist") {
+				config.Persist = true
 			}
 
 			rest.New(config).ServerForever(8080)
