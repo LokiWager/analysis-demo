@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"os"
 
@@ -15,8 +14,6 @@ import (
 )
 
 func main() {
-	// TODO: 2. trace 可展示，可唤起 trace 程序
-	// TODO: 3. 支持数据持久化及查询
 	logger.Init(&logger.Config{Debug: false})
 	app := &cli.App{
 		Name:  "diagnostic",
@@ -52,9 +49,13 @@ func main() {
 	}
 
 	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
+		err := http.ListenAndServe("localhost:6060", nil)
+		if err != nil {
+			logger.Fatalf("start pprof failed: %v", err)
+		}
 	}()
 
+	logger.Info("diagnostic server starting")
 	err := app.Run(os.Args)
 	if err != nil {
 		panic(err)

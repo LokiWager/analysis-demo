@@ -1,0 +1,10 @@
+services:
+  base:
+    image: lokikiller/analysis:demo
+    build:
+      context: .
+      target: base
+    ports:
+      - "38080:38080"
+      - "38081:38081"
+      - "38082:38082"

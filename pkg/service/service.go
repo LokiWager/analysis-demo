@@ -1,17 +1,19 @@
 package service
 
 import (
-	"debug/buildinfo"
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/labstack/echo/v4"
 	"github.com/shirou/gopsutil/v4/process"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/LokiWager/analysis-demo/pkg/logger"
+	"github.com/LokiWager/analysis-demo/pkg/utils/mongodbtool"
 )
 
 const (
@@ -22,8 +24,9 @@ const (
 type (
 	// ServiceConfig is the configuration for service.
 	ServiceConfig struct {
-		ProcessID int  `yaml:"processID" json:"processID"`
-		Persist   bool `yaml:"persist" json:"persist"`
+		ProcessID   int  `yaml:"processID" json:"processID"`
+		Persist     bool `yaml:"persist" json:"persist"`
+		ServicePort int
 	}
 
 	// Service is the service.
@@ -63,6 +66,9 @@ type (
 
 // NewService creates a service.
 func NewService(config *ServiceConfig) *Service {
+	logger.Infof("create service with config pid: %d", config.ProcessID)
+	logger.Infof("create service with config persist: %v", config.Persist)
+
 	p, err := process.NewProcess(int32(config.ProcessID))
 	if err != nil {
 		panic(err)
@@ -75,6 +81,24 @@ func NewService(config *ServiceConfig) *Service {
 		if err != nil {
 			logger.Fatalf("mkdir trace file path failed: %v", err)
 		}
+	}
+	// walk trace file dir and add all trace files to processTaskMap
+	files, err := os.ReadDir(DefaultTraceFilePath)
+	if err != nil {
+		logger.Fatalf("read trace file dir failed: %v", err)
+	}
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+		fileName := file.Name()
+		task := &ProcessTask{
+			FilePath:  fmt.Sprintf("%s/%s", DefaultTraceFilePath, fileName),
+			FileName:  fileName,
+			StartTime: time.Now(),
+			State:     PendingState,
+		}
+		processTaskMap.Store(fileName, task)
 	}
 
 	return &Service{
@@ -155,15 +179,45 @@ func (s *Service) GetProcessInfo(ctx echo.Context) error {
 	return ctx.JSON(200, info)
 }
 
-func (s *Service) getGoVersion(path string) (string, error) {
-	info, err := buildinfo.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	return info.GoVersion, nil
-}
-
 func (s *Service) GetUsage(ctx echo.Context) error {
+	if s.config.Persist {
+		startTs := ctx.QueryParam("start")
+		endTs := ctx.QueryParam("end")
+		if endTs == "" {
+			endTs = fmt.Sprintf("%d", time.Now().Unix())
+		}
+
+		query := bson.M{
+			"ts": bson.M{"$gte": startTs, "$lte": endTs},
+		}
+		if startTs == "" {
+			query = bson.M{
+				"ts": bson.M{"$lte": endTs},
+			}
+		}
+
+		metricCollection := mongodbtool.GetCollection("metrics")
+		mctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		cursor, err := metricCollection.Find(mctx, query)
+		if err != nil {
+			logger.Warnf("find metrics failed: %v", err)
+			return ctx.NoContent(500)
+		}
+		defer cursor.Close(mctx)
+
+		result := make([]map[string]interface{}, 0)
+		for cursor.Next(mctx) {
+			var doc map[string]interface{}
+			if err := cursor.Decode(&doc); err != nil {
+				logger.Warnf("decode metrics failed: %v", err)
+				continue
+			}
+			result = append(result, doc)
+		}
+
+		return ctx.JSON(200, result)
+	}
 	result := s.collectMetrics()
 	return ctx.JSON(200, result)
 }
@@ -198,157 +252,92 @@ func (s *Service) GetConnections(ctx echo.Context) error {
 }
 
 func (s *Service) GetProfile(ctx echo.Context) error {
-	// curl -o trace.out http://localhost:6060/debug/pprof/trace\?seconds\=5
-	// go tool trace trace.out
-	fileName, err := s.dumpTraceFile()
+	filePath, fileName, err := s.dumpTraceFile()
 	if err != nil {
 		logger.Warnf("dump trace file failed: %v", err)
 		return ctx.NoContent(500)
 	}
 
-	if _, err := exec.LookPath("go"); err != nil {
-		logger.Warnf("go command not found: %v", err)
+	err = s.startTraceTask(fileName, filePath)
+	if err != nil {
+		logger.Warnf("start trace task failed: %v", err)
 		return ctx.NoContent(500)
 	}
 
-	go func() {
-		err = exec.Command("go", "tool", "trace", "-http=:8891", fileName).Run()
-		if err != nil {
-			logger.Warnf("run go tool trace failed: %v", err)
-		}
-		defer func() {
-			_ = os.Remove(fileName)
-		}()
-	}()
+	return ctx.String(200, fmt.Sprintf("view profile at http://%s.localhost:%d/", fileName, s.config.ServicePort+1))
+}
 
-	return ctx.String(200, "view profile at http://[::]:8891/")
+func (s *Service) GetProfileList(ctx echo.Context) error {
+	tasks := s.listTraceTasks()
+	return ctx.JSON(200, tasks)
+}
+
+func (s *Service) StartProfile(ctx echo.Context) error {
+	fileName := ctx.QueryParam("file")
+	if fileName == "" {
+		return ctx.NoContent(400)
+	}
+
+	err := s.startTraceTask(fileName, fmt.Sprintf("%s/%s", s.traceFilePath, fileName))
+	if err != nil {
+		logger.Warnf("start trace task failed: %v", err)
+		return ctx.NoContent(500)
+	}
+
+	return ctx.String(200, fmt.Sprintf("view profile at http://%s.localhost:%d/", fileName, s.config.ServicePort+1))
+}
+
+func (s *Service) StopProfile(ctx echo.Context) error {
+	fileName := ctx.QueryParam("file")
+	if fileName == "" {
+		return ctx.NoContent(400)
+	}
+
+	err := s.stopTraceTask(fileName)
+	if err != nil {
+		logger.Warnf("stop trace task failed: %v", err)
+		return ctx.NoContent(500)
+	}
+
+	return ctx.NoContent(200)
+}
+
+func (s *Service) DeleteProfile(ctx echo.Context) error {
+	fileName := ctx.QueryParam("file")
+	if fileName == "" {
+		return ctx.NoContent(400)
+	}
+
+	err := s.deleteTraceFile(fileName)
+	if err != nil {
+		logger.Warnf("delete trace file failed: %v", err)
+		return ctx.NoContent(500)
+	}
+
+	return ctx.NoContent(200)
+}
+
+func (s *Service) TraceReverseProxy(ctx echo.Context) error {
+	// get subdomain
+	host := ctx.Request().Header.Get("X-Forwarded-Host")
+	if host == "" {
+		host = ctx.Request().Host
+	}
+	ctx.Request().Host = host
+	parts := strings.Split(host, ".")
+	if len(parts) < 2 {
+		return ctx.NoContent(400)
+	}
+	subdomain := parts[0]
+	err := s.traceProxyHandler(ctx.Response(), ctx.Request(), subdomain)
+	if err != nil {
+		logger.Warnf("trace proxy handler failed: %v", err)
+		return ctx.NoContent(500)
+	}
+
+	return nil
 }
 
 func (s *Service) Close() {
 	close(s.stopCh)
-}
-
-func (s *Service) dumpTraceFile() (string, error) {
-	// create file to trace dir with name trace-<date>.out
-	fileName := fmt.Sprintf("trace-%d.out", time.Now().UnixMilli())
-	tmpFile, err := os.Create(fmt.Sprintf("%s/%s", s.traceFilePath, fileName))
-	if err != nil {
-		logger.Warnf("create tmp file failed: %v", err)
-		return "", err
-	}
-	fileName = fmt.Sprintf("%s/%s", s.traceFilePath, fileName)
-
-	// write to file
-	resp, err := s.restyClient.R().
-		SetQueryParam("seconds", "5").
-		Execute("GET", "http://localhost:6060/debug/pprof/trace")
-	if err != nil {
-		_ = os.Remove(tmpFile.Name())
-		logger.Warnf("get profile failed: %v", err)
-		return "", err
-	}
-
-	traceData := resp.Body()
-	err = os.WriteFile(fileName, traceData, 0644)
-	if err != nil {
-		logger.Warnf("write trace data to file failed: %v", err)
-		return "", err
-	}
-
-	return fileName, nil
-}
-
-func (s *Service) dumpTraceFileToMDB() error {
-	//ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	//defer cancel()
-	//
-	//traceCollection := mongodbtool.GetCollection("trace")
-	//
-	//fileName, err := s.dumpTraceFile()
-	//if err != nil {
-	//	logger.Warnf("dump trace file failed: %v", err)
-	//	return err
-	//}
-	//
-	//file, err := os.Open(fileName)
-	//if err != nil {
-	//	logger.Warnf("open trace file failed: %v", err)
-	//	return err
-	//}
-	//
-	//defer func() {
-	//	_ = file.Close()
-	//	_ = os.Remove(fileName)
-	//}()
-	//
-	//// read file content to string
-	//buf := make([]byte, 1024)
-	//n, err := file.Read(buf)
-	//if err != nil {
-	//	logger.Warnf("read trace file failed: %v", err)
-	//	return err
-	//}
-	return nil
-}
-
-func (s *Service) collectMetrics() map[string]interface{} {
-	result := map[string]interface{}{}
-
-	cpuPercent, err := s.process.CPUPercent()
-	if err != nil {
-		logger.Warnf("get process cpu cpuPercent failed: %v", err)
-	} else {
-		result["cpuPercent"] = cpuPercent
-	}
-
-	memoryPercent, err := s.process.MemoryPercent()
-	if err != nil {
-		logger.Warnf("get process memory memoryPercent failed: %v", err)
-	} else {
-		result["memoryPercent"] = memoryPercent
-	}
-
-	pageFaults, err := s.process.PageFaults()
-	if err != nil {
-		logger.Warnf("get process pageFaults failed: %v", err)
-	} else {
-		result["pageFaults"] = pageFaults.MajorFaults + pageFaults.MinorFaults + pageFaults.ChildMajorFaults + pageFaults.ChildMinorFaults
-	}
-
-	ioCounters, err := s.process.IOCounters()
-	if err != nil {
-		logger.Warnf("get process ioCounters failed: %v", err)
-	} else {
-		result["readCount"] = ioCounters.ReadCount
-		result["writeCount"] = ioCounters.WriteCount
-		result["readBytes"] = ioCounters.ReadBytes
-		result["writeBytes"] = ioCounters.WriteBytes
-	}
-
-	memoryInfo, err := s.process.MemoryInfo()
-	if err != nil {
-		logger.Warnf("get process memoryInfo failed: %v", err)
-	} else {
-		result["rss"] = memoryInfo.RSS
-		result["vms"] = memoryInfo.VMS
-		result["swap"] = memoryInfo.Swap
-	}
-
-	cpuTimes, err := s.process.Times()
-	if err != nil {
-		logger.Warnf("get process cpuTimes failed: %v", err)
-	} else {
-		result["userTime"] = cpuTimes.User
-		result["systemTime"] = cpuTimes.System
-		result["iowait"] = cpuTimes.Iowait
-	}
-
-	contextSwitches, err := s.process.NumCtxSwitches()
-	if err != nil {
-		logger.Warnf("get process contextSwitches failed: %v", err)
-	} else {
-		result["contextSwitch"] = contextSwitches.Involuntary + contextSwitches.Voluntary
-	}
-
-	return result
 }

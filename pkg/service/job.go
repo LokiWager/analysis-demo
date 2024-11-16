@@ -56,11 +56,18 @@ func (s *Service) detectAnomaly() {
 			}
 			s.detectEMA.Update(value)
 			if s.detectEMA.IsAnomaly(value) {
-				_, err = s.dumpTraceFile()
+				filePath, fileName, err := s.dumpTraceFile()
 				if err != nil {
 					logger.Warnf("dump trace file failed: %v", err)
 				} else {
 					suspendTimes = DefaultSuspendTimes
+					task := &ProcessTask{
+						FilePath:  filePath,
+						FileName:  fileName,
+						StartTime: time.Now(),
+						State:     PendingState,
+					}
+					processTaskMap.Store(fileName, task)
 				}
 			}
 		}
@@ -79,6 +86,7 @@ func (s *Service) saveMetrics() {
 		case <-ticker.C:
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			result := s.collectMetrics()
+			result["ts"] = time.Now().Unix()
 			_, err := metricCollection.InsertOne(ctx, result)
 			if err != nil {
 				logger.Warnf("save metrics failed: %v", err)
