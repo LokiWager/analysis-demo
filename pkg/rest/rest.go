@@ -61,7 +61,7 @@ func (s *Server) setupAPIs() {
 	s.group.GET("/process/start-profile", s.Service.StartProfile)
 	s.group.GET("/process/stop-profile", s.Service.StopProfile)
 	s.group.DELETE("/process/delete-profile", s.Service.DeleteProfile)
-	s.group.GET("/process/custome-metrics", s.Service.GetCustomMetrics)
+	s.group.GET("/process/custom-metrics", s.Service.GetCustomMetrics)
 }
 
 func (s *Server) ServerForever(port int) {
