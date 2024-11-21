@@ -49,4 +49,21 @@ jobs:
         uses: codecov/codecov-action@v3.1.4
         with:
           file: ./coverage.txt
+  test-win:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - name: Set up Go 1.x.y
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
 
+      - name: Checkout codebase
+        uses: actions/checkout@v3
+
+      - name: Test
+        run: |
+          go mod verify
+          go mod download
+          go test -v -gcflags "all=-l" ./pkg/...

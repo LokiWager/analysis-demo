@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build windows
 
 /*
  * Copyright (c) 2024, LokiWager
@@ -82,7 +82,7 @@ func (s *Service) startTraceTask(fileName, filePath string) error {
 
 	// create command
 	cmd := exec.Command("go", "tool", "trace", "-http=:"+strconv.Itoa(port), filePath)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	err := cmd.Start()
 	if err != nil {
 		logger.Warnf("start trace task failed: %v", err)
@@ -114,11 +114,17 @@ func (s *Service) stopTraceTask(fileName string) error {
 		return fmt.Errorf("task not found")
 	}
 
-	err := syscall.Kill(-task.(*ProcessTask).Command.Process.Pid, syscall.SIGKILL)
+	t := task.(*ProcessTask)
+	if t.State != RunningState {
+		return fmt.Errorf("task is not running")
+	}
+
+	err := t.Command.Process.Kill()
 	if err != nil {
 		logger.Warnf("kill trace task failed: %v", err)
 		return err
 	}
+
 	task.(*ProcessTask).State = PendingState
 	processTaskMap.Store(fileName, task)
 
@@ -137,7 +143,7 @@ func (s *Service) deleteTraceFile(fileName string) error {
 
 	// try to kill the process if it's still running
 	if task.(*ProcessTask).State == RunningState && task.(*ProcessTask).Command.Process != nil {
-		_ = syscall.Kill(-task.(*ProcessTask).Command.Process.Pid, syscall.SIGKILL)
+		_ = task.(*ProcessTask).Command.Process.Kill()
 	}
 
 	err := os.Remove(task.(*ProcessTask).FilePath)
