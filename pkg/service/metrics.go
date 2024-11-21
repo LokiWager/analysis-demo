@@ -2,6 +2,9 @@ package service
 
 import (
 	"debug/buildinfo"
+	"fmt"
+	"sync"
+
 	"github.com/LokiWager/analysis-demo/pkg/logger"
 )
 
@@ -73,4 +76,35 @@ func (s *Service) getGoVersion(path string) (string, error) {
 		return "", err
 	}
 	return info.GoVersion, nil
+}
+
+type (
+	Collector func() map[string]interface{}
+)
+
+var (
+	customMetricsRegistry sync.Map
+)
+
+func (s *Service) Register(name string, collector Collector) {
+	customMetricsRegistry.Store(name, collector)
+}
+
+func (s *Service) Unregister(name string) {
+	customMetricsRegistry.Delete(name)
+}
+
+func (s *Service) collectCustomMetrics() map[string]interface{} {
+	result := map[string]interface{}{}
+
+	customMetricsRegistry.Range(func(key, value interface{}) bool {
+		if collector, ok := value.(Collector); ok {
+			for k, v := range collector() {
+				result[fmt.Sprintf("%s:%s", key, k)] = v
+			}
+		}
+		return true
+	})
+
+	return result
 }

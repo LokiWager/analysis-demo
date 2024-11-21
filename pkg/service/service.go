@@ -338,6 +338,11 @@ func (s *Service) TraceReverseProxy(ctx echo.Context) error {
 	return nil
 }
 
+func (s *Service) GetCustomMetrics(ctx echo.Context) error {
+	result := s.collectCustomMetrics()
+	return ctx.JSON(200, result)
+}
+
 func (s *Service) Close() {
 	close(s.stopCh)
 }

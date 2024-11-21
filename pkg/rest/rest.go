@@ -17,7 +17,7 @@ type (
 	Server struct {
 		app     *echo.Echo
 		group   *echo.Group
-		service *service.Service
+		Service *service.Service
 	}
 )
 
@@ -43,7 +43,7 @@ func New(cfg *service.ServiceConfig) *Server {
 	s := &Server{
 		app:     app,
 		group:   serviceGroup,
-		service: svc,
+		Service: svc,
 	}
 
 	s.setupAPIs()
@@ -52,15 +52,16 @@ func New(cfg *service.ServiceConfig) *Server {
 }
 
 func (s *Server) setupAPIs() {
-	s.group.GET("/process/info", s.service.GetProcessInfo)
-	s.group.GET("/process/fds", s.service.GetOpenFiles)
-	s.group.GET("/process/usage", s.service.GetUsage)
-	s.group.GET("/process/connections", s.service.GetConnections)
-	s.group.GET("/process/generate-profile", s.service.GetProfile)
-	s.group.GET("/process/profiles", s.service.GetProfileList)
-	s.group.GET("/process/start-profile", s.service.StartProfile)
-	s.group.GET("/process/stop-profile", s.service.StopProfile)
-	s.group.DELETE("/process/delete-profile", s.service.DeleteProfile)
+	s.group.GET("/process/info", s.Service.GetProcessInfo)
+	s.group.GET("/process/fds", s.Service.GetOpenFiles)
+	s.group.GET("/process/usage", s.Service.GetUsage)
+	s.group.GET("/process/connections", s.Service.GetConnections)
+	s.group.GET("/process/generate-profile", s.Service.GetProfile)
+	s.group.GET("/process/profiles", s.Service.GetProfileList)
+	s.group.GET("/process/start-profile", s.Service.StartProfile)
+	s.group.GET("/process/stop-profile", s.Service.StopProfile)
+	s.group.DELETE("/process/delete-profile", s.Service.DeleteProfile)
+	s.group.GET("/process/custome-metrics", s.Service.GetCustomMetrics)
 }
 
 func (s *Server) ServerForever(port int) {
@@ -74,7 +75,7 @@ func (s *Server) ServerForever(port int) {
 		proxy.Use(newRecover())
 		proxy.Use(newErrorHandler())
 
-		proxy.Any("/*", s.service.TraceReverseProxy)
+		proxy.Any("/*", s.Service.TraceReverseProxy)
 
 		err := proxy.Start(fmt.Sprintf(":%d", port+1))
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {

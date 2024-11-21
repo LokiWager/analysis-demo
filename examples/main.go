@@ -25,27 +25,29 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			// Do something
-			go func() {
-				time.Sleep(5 * time.Second)
-				logger.Infof("sleep 5 seconds")
-			}()
-
 			n := rand.Intn(1000)
 			sum := 0
 			for i := 0; i < n; i++ {
 				sum += i
 			}
 			logger.Infof("sum is %d", sum)
+			diagnostics.Service.Register("sum", func() map[string]interface{} {
+				return map[string]interface{}{
+					"sum": sum,
+				}
+			})
 		case <-ticker2.C:
 			restyClient := resty.New()
 			// call google.com
 			_, err := restyClient.R().Get("https://www.google.com")
 			if err != nil {
 				logger.Errorf("call google.com failed: %v", err)
-			} else {
-				logger.Infof("call google.com success")
 			}
+			diagnostics.Service.Register("google", func() map[string]interface{} {
+				return map[string]interface{}{
+					"status": "ok",
+				}
+			})
 		}
 	}
 }

@@ -32,7 +32,8 @@ type (
 
 	// Diagnostic is the diagnostic.
 	Diagnostic struct {
-		config *DiagnosticConfig
+		config  *DiagnosticConfig
+		Service *service.Service
 	}
 )
 
